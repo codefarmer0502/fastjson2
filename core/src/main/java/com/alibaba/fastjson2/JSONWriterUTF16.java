@@ -1,5 +1,6 @@
 package com.alibaba.fastjson2;
 
+import com.alibaba.fastjson2.time.*;
 import com.alibaba.fastjson2.util.*;
 import com.alibaba.fastjson2.writer.ObjectWriter;
 import sun.misc.Unsafe;
@@ -9,16 +10,12 @@ import java.io.OutputStream;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.charset.Charset;
-import java.nio.charset.StandardCharsets;
 import java.text.DecimalFormat;
-import java.time.*;
 import java.util.*;
 
 import static com.alibaba.fastjson2.JSONFactory.*;
 import static com.alibaba.fastjson2.JSONWriter.Feature.*;
-import static com.alibaba.fastjson2.JSONWriter.Feature.NotWriteDefaultValue;
 import static com.alibaba.fastjson2.util.IOUtils.*;
-import static com.alibaba.fastjson2.util.JDKUtils.*;
 import static com.alibaba.fastjson2.util.JDKUtils.FIELD_DECIMAL_INT_COMPACT_OFFSET;
 import static com.alibaba.fastjson2.util.UnsafeUtils.UNSAFE;
 
@@ -30,7 +27,7 @@ class JSONWriterUTF16
     final CacheItem cacheItem;
 
     JSONWriterUTF16(Context ctx) {
-        super(ctx, null, false, StandardCharsets.UTF_16);
+        super(ctx, null, false, IOUtils.UTF_16);
         int cacheIndex = System.identityHashCode(Thread.currentThread()) & (CACHE_ITEMS.length - 1);
         cacheItem = CACHE_ITEMS[cacheIndex];
         char[] chars = CHARS_UPDATER.getAndSet(cacheItem, null);
@@ -463,11 +460,11 @@ class JSONWriterUTF16
                 case '>':
                 case '(':
                 case ')':
-                    if (browserSecure && (ch == '<' || ch == '>' || ch == '(' || ch == ')')) {
+                    if (browserSecure) {
                         chars[off] = '\\';
                         chars[off + 1] = 'u';
-                        chars[off + 2] = DIGITS[(ch >>> 12) & 15];
-                        chars[off + 3] = DIGITS[(ch >>> 8) & 15];
+                        chars[off + 2] = '0';
+                        chars[off + 3] = '0';
                         chars[off + 4] = DIGITS[(ch >>> 4) & 15];
                         chars[off + 5] = DIGITS[ch & 15];
                         off += 6;
@@ -608,11 +605,11 @@ class JSONWriterUTF16
                 case '>':
                 case '(':
                 case ')':
-                    if (browserSecure && (ch == '<' || ch == '>' || ch == '(' || ch == ')')) {
+                    if (browserSecure) {
                         chars[off] = '\\';
                         chars[off + 1] = 'u';
-                        chars[off + 2] = DIGITS[(ch >>> 12) & 15];
-                        chars[off + 3] = DIGITS[(ch >>> 8) & 15];
+                        chars[off + 2] = '0';
+                        chars[off + 3] = '0';
                         chars[off + 4] = DIGITS[(ch >>> 4) & 15];
                         chars[off + 5] = DIGITS[ch & 15];
                         off += 6;
@@ -753,11 +750,11 @@ class JSONWriterUTF16
                 case '>':
                 case '(':
                 case ')':
-                    if (browserSecure && (ch == '<' || ch == '>' || ch == '(' || ch == ')')) {
+                    if (browserSecure) {
                         chars[off] = '\\';
                         chars[off + 1] = 'u';
-                        chars[off + 2] = DIGITS[(ch >>> 12) & 15];
-                        chars[off + 3] = DIGITS[(ch >>> 8) & 15];
+                        chars[off + 2] = '0';
+                        chars[off + 3] = '0';
                         chars[off + 4] = DIGITS[(ch >>> 4) & 15];
                         chars[off + 5] = DIGITS[ch & 15];
                         off += 6;
@@ -898,11 +895,11 @@ class JSONWriterUTF16
                 case '>':
                 case '(':
                 case ')':
-                    if (browserSecure && (ch == '<' || ch == '>' || ch == '(' || ch == ')')) {
+                    if (browserSecure) {
                         chars[off] = '\\';
                         chars[off + 1] = 'u';
-                        chars[off + 2] = DIGITS[(ch >>> 12) & 15];
-                        chars[off + 3] = DIGITS[(ch >>> 8) & 15];
+                        chars[off + 2] = '0';
+                        chars[off + 3] = '0';
                         chars[off + 4] = DIGITS[(ch >>> 4) & 15];
                         chars[off + 5] = DIGITS[ch & 15];
                         off += 6;
@@ -914,8 +911,8 @@ class JSONWriterUTF16
                     if (escapeNoneAscii && ch > 0x007F) {
                         chars[off] = '\\';
                         chars[off + 1] = 'u';
-                        chars[off + 2] = DIGITS[(ch >>> 12) & 15];
-                        chars[off + 3] = DIGITS[(ch >>> 8) & 15];
+                        chars[off + 2] = '0';
+                        chars[off + 3] = '0';
                         chars[off + 4] = DIGITS[(ch >>> 4) & 15];
                         chars[off + 5] = DIGITS[ch & 15];
                         off += 6;
@@ -1505,7 +1502,7 @@ class JSONWriterUTF16
     @Override
     public final void writeNameRaw(char[] name) {
         int off = this.off;
-        int minCapacity = off + name.length + 1;
+        int minCapacity = off + name.length + 2 + indent;
         if (minCapacity >= this.chars.length) {
             ensureCapacity(minCapacity);
         }
@@ -1528,7 +1525,7 @@ class JSONWriterUTF16
 
     @Override
     public final void writeNameRaw(char[] chars, int off, int len) {
-        int minCapacity = this.off + len + 1;
+        int minCapacity = this.off + len + 2 + indent;
         if (minCapacity >= this.chars.length) {
             ensureCapacity(minCapacity);
         }
@@ -1980,32 +1977,6 @@ class JSONWriterUTF16
     }
 
     @Override
-    public final void writeLocalDate(LocalDate date) {
-        if (date == null) {
-            writeNull();
-            return;
-        }
-
-        final Context context = this.context;
-        if (context.dateFormat != null) {
-            if (writeLocalDateWithFormat(date, context)) {
-                return;
-            }
-        }
-
-        int off = this.off;
-        int minCapacity = off + 18;
-        if (minCapacity >= chars.length) {
-            ensureCapacity(minCapacity);
-        }
-        final char[] chars = this.chars;
-        chars[off++] = quote;
-        off = IOUtils.writeLocalDate(chars, off, date.getYear(), date.getMonthValue(), date.getDayOfMonth());
-        chars[off++] = quote;
-        this.off = off;
-    }
-
-    @Override
     public final void writeLocalDateTime(LocalDateTime dateTime) {
         int off = this.off;
         int minCapacity = off + 38;
@@ -2015,10 +1986,10 @@ class JSONWriterUTF16
 
         final char[] chars = this.chars;
         chars[off++] = quote;
-        LocalDate localDate = dateTime.toLocalDate();
-        off = IOUtils.writeLocalDate(chars, off, localDate.getYear(), localDate.getMonthValue(), localDate.getDayOfMonth());
+        LocalDate localDate = dateTime.date;
+        off = IOUtils.writeLocalDate(chars, off, localDate.year, localDate.monthValue, localDate.dayOfMonth);
         chars[off++] = ' ';
-        off = IOUtils.writeLocalTime(chars, off, dateTime.toLocalTime());
+        off = IOUtils.writeLocalTime(chars, off, dateTime.time);
         chars[off] = quote;
         this.off = off + 1;
     }
@@ -2200,108 +2171,6 @@ class JSONWriterUTF16
     }
 
     @Override
-    public final void writeLocalTime(LocalTime time) {
-        int off = this.off;
-        int minCapacity = off + 20;
-        if (minCapacity >= chars.length) {
-            ensureCapacity(minCapacity);
-        }
-
-        final char[] chars = this.chars;
-        chars[off++] = quote;
-        off = IOUtils.writeLocalTime(chars, off, time);
-        chars[off] = quote;
-        this.off = off + 1;
-    }
-
-    @Override
-    public final void writeZonedDateTime(ZonedDateTime dateTime) {
-        if (dateTime == null) {
-            writeNull();
-            return;
-        }
-        ZoneId zone = dateTime.getZone();
-        String zoneId = zone.getId();
-        int zoneIdLength = zoneId.length();
-
-        char firstZoneChar = '\0';
-        int zoneSize;
-        if (ZoneOffset.UTC == zone || (zoneIdLength <= 3 && ("UTC".equals(zoneId) || "Z".equals(zoneId)))) {
-            zoneId = "Z";
-            zoneSize = 1;
-        } else if (zoneIdLength != 0 && ((firstZoneChar = zoneId.charAt(0)) == '+' || firstZoneChar == '-')) {
-            zoneSize = zoneIdLength;
-        } else {
-            zoneSize = 2 + zoneIdLength;
-        }
-
-        int off = this.off;
-        int minCapacity = off + zoneSize + 38;
-        if (minCapacity >= chars.length) {
-            ensureCapacity(minCapacity);
-        }
-
-        final char[] chars = this.chars;
-        chars[off++] = quote;
-        LocalDate localDate = dateTime.toLocalDate();
-        off = IOUtils.writeLocalDate(chars, off, localDate.getYear(), localDate.getMonthValue(), localDate.getDayOfMonth());
-        chars[off++] = 'T';
-        off = IOUtils.writeLocalTime(chars, off, dateTime.toLocalTime());
-        if (zoneSize == 1) {
-            chars[off++] = 'Z';
-        } else if (firstZoneChar == '+' || firstZoneChar == '-') {
-            zoneId.getChars(0, zoneIdLength, chars, off);
-            off += zoneIdLength;
-        } else {
-            chars[off++] = '[';
-            zoneId.getChars(0, zoneIdLength, chars, off);
-            off += zoneIdLength;
-            chars[off++] = ']';
-        }
-        chars[off] = quote;
-        this.off = off + 1;
-    }
-
-    @Override
-    public final void writeOffsetDateTime(OffsetDateTime dateTime) {
-        if (dateTime == null) {
-            writeNull();
-            return;
-        }
-
-        ZoneOffset offset = dateTime.getOffset();
-        String zoneId = offset.getId();
-        int zoneIdLength = zoneId.length();
-        boolean utc = ZoneOffset.UTC == offset
-                || (zoneIdLength <= 3 && ("UTC".equals(zoneId) || "Z".equals(zoneId)));
-        if (utc) {
-            zoneId = "Z";
-        }
-
-        int off = this.off;
-        int minCapacity = off + zoneIdLength + 40;
-        if (minCapacity >= chars.length) {
-            ensureCapacity(minCapacity);
-        }
-
-        final char[] chars = this.chars;
-        chars[off++] = quote;
-        LocalDateTime ldt = dateTime.toLocalDateTime();
-        LocalDate date = ldt.toLocalDate();
-        off = IOUtils.writeLocalDate(chars, off, date.getYear(), date.getMonthValue(), date.getDayOfMonth());
-        chars[off++] = 'T';
-        LocalTime time = ldt.toLocalTime();
-        off = IOUtils.writeLocalTime(chars, off, time);
-        if (utc) {
-            chars[off++] = 'Z';
-        } else {
-            zoneId.getChars(0, zoneIdLength, chars, off);
-        }
-        chars[off] = quote;
-        this.off = off + 1;
-    }
-
-    @Override
     public final void writeNameRaw(byte[] bytes) {
         throw new JSONException("UnsupportedOperation");
     }
@@ -2396,9 +2265,9 @@ class JSONWriterUTF16
         }
 
         if (ascii) {
-            if (charset == StandardCharsets.UTF_8
-                    || charset == StandardCharsets.ISO_8859_1
-                    || charset == StandardCharsets.US_ASCII
+            if (charset == IOUtils.UTF_8
+                    || charset == IOUtils.ISO_8859_1
+                    || charset == IOUtils.US_ASCII
             ) {
                 byte[] bytes = new byte[off];
                 for (int i = 0; i < off; i++) {
@@ -2410,7 +2279,7 @@ class JSONWriterUTF16
 
         String str = new String(chars, 0, off);
         if (charset == null) {
-            charset = StandardCharsets.UTF_8;
+            charset = IOUtils.UTF_8;
         }
         return str.getBytes(charset);
     }

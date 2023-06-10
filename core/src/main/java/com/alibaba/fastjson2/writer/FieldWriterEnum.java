@@ -9,7 +9,6 @@ import com.alibaba.fastjson2.util.IOUtils;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Type;
-import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 
 class FieldWriterEnum
@@ -201,7 +200,7 @@ class FieldWriterEnum
             final boolean usingOrdinal = (features & JSONWriter.Feature.WriteEnumUsingOrdinal.mask) != 0;
             boolean unquoteName = (features & JSONWriter.Feature.UnquoteFieldName.mask) != 0;
             final boolean utf8 = jsonWriter.utf8;
-            final boolean utf16 = jsonWriter.utf8 ? false : jsonWriter.utf16;
+            final boolean utf16 = !jsonWriter.utf8 && jsonWriter.utf16;
             final int ordinal = e.ordinal();
 
             if (usingOrdinal) {
@@ -264,7 +263,7 @@ class FieldWriterEnum
 
     private byte[] getNameBytes(int ordinal) {
         byte[] bytes;
-        byte[] nameUft8Bytes = enumConstants[ordinal].name().getBytes(StandardCharsets.UTF_8);
+        byte[] nameUft8Bytes = enumConstants[ordinal].name().getBytes(IOUtils.UTF_8);
         bytes = Arrays.copyOf(nameWithColonUTF8, nameWithColonUTF8.length + nameUft8Bytes.length + 2);
         bytes[nameWithColonUTF8.length] = '"';
         int index = nameWithColonUTF8.length + 1;

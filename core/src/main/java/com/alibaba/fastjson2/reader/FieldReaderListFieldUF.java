@@ -1,6 +1,5 @@
 package com.alibaba.fastjson2.reader;
 
-import com.alibaba.fastjson2.schema.JSONSchema;
 import com.alibaba.fastjson2.util.UnsafeUtils;
 
 import java.lang.reflect.Field;
@@ -25,7 +24,6 @@ final class FieldReaderListFieldUF<T>
             String format,
             Locale locale,
             Collection defaultValue,
-            JSONSchema schema,
             Field field) {
         super(
                 fieldName,
@@ -38,7 +36,6 @@ final class FieldReaderListFieldUF<T>
                 format,
                 locale,
                 defaultValue,
-                schema,
                 null,
                 field,
                 null
@@ -48,10 +45,6 @@ final class FieldReaderListFieldUF<T>
 
     @Override
     public void accept(Object object, Object value) {
-        if (schema != null) {
-            schema.assertValidate(value);
-        }
-
         UNSAFE.putObject(object, fieldOffset, value);
     }
 }

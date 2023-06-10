@@ -2,7 +2,6 @@ package com.alibaba.fastjson2.reader;
 
 import com.alibaba.fastjson2.JSONException;
 import com.alibaba.fastjson2.JSONReader;
-import com.alibaba.fastjson2.schema.JSONSchema;
 import com.alibaba.fastjson2.util.UnsafeUtils;
 
 import java.lang.reflect.Field;
@@ -15,8 +14,8 @@ class FieldReaderStringField<T>
     final boolean trim;
     final long fieldOffset;
 
-    FieldReaderStringField(String fieldName, Class fieldType, int ordinal, long features, String format, String defaultValue, JSONSchema schema, Field field) {
-        super(fieldName, fieldType, fieldType, ordinal, features, format, defaultValue, schema, field);
+    FieldReaderStringField(String fieldName, Class fieldType, int ordinal, long features, String format, String defaultValue, Field field) {
+        super(fieldName, fieldType, fieldType, ordinal, features, format, defaultValue, field);
         trim = "trim".equals(format) || (features & JSONReader.Feature.TrimString.mask) != 0;
         fieldOffset = UNSAFE_SUPPORT ? UnsafeUtils.objectFieldOffset(field) : 0;
     }
@@ -26,10 +25,6 @@ class FieldReaderStringField<T>
         String fieldValue = jsonReader.readString();
         if (trim && fieldValue != null) {
             fieldValue = fieldValue.trim();
-        }
-
-        if (schema != null) {
-            schema.assertValidate(fieldValue);
         }
 
         if (UNSAFE_SUPPORT) {
@@ -49,11 +44,6 @@ class FieldReaderStringField<T>
         if (trim && fieldValue != null) {
             fieldValue = fieldValue.trim();
         }
-
-        if (schema != null) {
-            schema.assertValidate(fieldValue);
-        }
-
         accept(object, fieldValue);
     }
 
@@ -81,10 +71,6 @@ class FieldReaderStringField<T>
 
         if (trim && fieldValue != null) {
             fieldValue = fieldValue.trim();
-        }
-
-        if (schema != null) {
-            schema.assertValidate(fieldValue);
         }
 
         if (UNSAFE_SUPPORT) {

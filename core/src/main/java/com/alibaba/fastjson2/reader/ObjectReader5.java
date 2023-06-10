@@ -3,12 +3,11 @@ package com.alibaba.fastjson2.reader;
 import com.alibaba.fastjson2.JSONB;
 import com.alibaba.fastjson2.JSONException;
 import com.alibaba.fastjson2.JSONReader;
-import com.alibaba.fastjson2.schema.JSONSchema;
+import com.alibaba.fastjson2.function.Function;
+import com.alibaba.fastjson2.function.Supplier;
 import com.alibaba.fastjson2.util.UnsafeUtils;
 
 import java.lang.reflect.Type;
-import java.util.function.Function;
-import java.util.function.Supplier;
 
 import static com.alibaba.fastjson2.JSONB.Constants.BC_OBJECT;
 import static com.alibaba.fastjson2.JSONB.Constants.BC_OBJECT_END;
@@ -43,7 +42,6 @@ public class ObjectReader5<T>
             Class objectClass,
             Supplier<T> creator,
             long features,
-            JSONSchema schema,
             Function buildFunction,
             FieldReader fieldReader0,
             FieldReader fieldReader1,
@@ -56,7 +54,6 @@ public class ObjectReader5<T>
                 null,
                 null,
                 features,
-                schema,
                 creator,
                 buildFunction,
                 fieldReader0,
@@ -72,12 +69,11 @@ public class ObjectReader5<T>
             String typeKey,
             String typeName,
             long features,
-            JSONSchema schema,
             Supplier<T> creator,
             Function buildFunction,
             FieldReader... fieldReaders
     ) {
-        super(objectClass, typeKey, typeName, features, schema, creator, buildFunction, fieldReaders);
+        super(objectClass, typeKey, typeName, features, creator, buildFunction, fieldReaders);
 
         this.fieldReader0 = fieldReaders[0];
         this.fieldReader1 = fieldReaders[1];
@@ -200,7 +196,7 @@ public class ObjectReader5<T>
         T object;
         if (creator != null) {
             object = creator.get();
-        } else if (UNSAFE_SUPPORT && ((features | jsonReader.getContext().getFeatures()) & JSONReader.Feature.FieldBased.mask) != 0) {
+        } else if (UNSAFE_SUPPORT && ((features | jsonReader.context.getFeatures()) & JSONReader.Feature.FieldBased.mask) != 0) {
             try {
                 object = (T) UnsafeUtils.UNSAFE.allocateInstance(objectClass);
             } catch (InstantiationException e) {
@@ -261,10 +257,6 @@ public class ObjectReader5<T>
             object = (T) buildFunction.apply(object);
         }
 
-        if (schema != null) {
-            schema.assertValidate(object);
-        }
-
         return object;
     }
 
@@ -274,7 +266,7 @@ public class ObjectReader5<T>
             jsonReader.errorOnNoneSerializable(objectClass);
         }
 
-        if (jsonReader.isJSONB()) {
+        if (jsonReader.jsonb) {
             return readJSONBObject(jsonReader, fieldType, fieldName, features);
         }
 
@@ -306,7 +298,7 @@ public class ObjectReader5<T>
                 if (buildFunction != null) {
                     return (T) buildFunction.apply(object);
                 }
-                return (T) object;
+                return object;
             }
 
             return processObjectInputSingleItemArray(jsonReader, fieldType, fieldName, featuresAll);
@@ -330,7 +322,7 @@ public class ObjectReader5<T>
 
             if (i == 0 && hashCode == HASH_TYPE) {
                 long typeHash = jsonReader.readTypeHashCode();
-                JSONReader.Context context = jsonReader.getContext();
+                JSONReader.Context context = jsonReader.context;
                 ObjectReader autoTypeObjectReader = context.getObjectReaderAutoType(typeHash);
                 if (autoTypeObjectReader == null) {
                     String typeName = jsonReader.getString();
@@ -390,10 +382,6 @@ public class ObjectReader5<T>
 
         if (buildFunction != null) {
             object = (T) buildFunction.apply(object);
-        }
-
-        if (schema != null) {
-            schema.assertValidate(object);
         }
 
         return object;

@@ -1,6 +1,7 @@
 package com.alibaba.fastjson2;
 
 import com.alibaba.fastjson2.internal.trove.map.hash.TLongIntHashMap;
+import com.alibaba.fastjson2.time.*;
 import com.alibaba.fastjson2.util.Fnv;
 import com.alibaba.fastjson2.util.IOUtils;
 import com.alibaba.fastjson2.util.JDKUtils;
@@ -12,25 +13,17 @@ import java.io.OutputStream;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.charset.Charset;
-import java.nio.charset.StandardCharsets;
 import java.text.DecimalFormat;
-import java.time.*;
 import java.util.*;
 
 import static com.alibaba.fastjson2.JSONB.Constants.*;
 import static com.alibaba.fastjson2.JSONFactory.*;
 import static com.alibaba.fastjson2.JSONWriter.Feature.WriteNameAsSymbol;
-import static com.alibaba.fastjson2.util.DateUtils.OFFSET_8_ZONE_ID_NAME;
-import static com.alibaba.fastjson2.util.DateUtils.SHANGHAI_ZONE_ID_NAME;
 import static com.alibaba.fastjson2.util.JDKUtils.*;
 import static com.alibaba.fastjson2.util.TypeUtils.*;
 
 final class JSONWriterJSONB
         extends JSONWriter {
-    // optimize for write ZonedDateTime
-    static final byte[] SHANGHAI_ZONE_ID_NAME_BYTES = JSONB.toBytes(SHANGHAI_ZONE_ID_NAME);
-    static final byte[] OFFSET_8_ZONE_ID_NAME_BYTES = JSONB.toBytes(OFFSET_8_ZONE_ID_NAME);
-
     private final CacheItem cacheItem;
     private byte[] bytes;
     private TLongIntHashMap symbols;
@@ -39,7 +32,7 @@ final class JSONWriterJSONB
     protected long rootTypeNameHash;
 
     JSONWriterJSONB(Context ctx, SymbolTable symbolTable) {
-        super(ctx, symbolTable, true, StandardCharsets.UTF_8);
+        super(ctx, symbolTable, true, IOUtils.UTF_8);
         cacheItem = CACHE_ITEMS[System.identityHashCode(Thread.currentThread()) & (CACHE_ITEMS.length - 1)];
         byte[] bytes = BYTES_UPDATER.getAndSet(cacheItem, null);
         if (bytes == null) {
@@ -448,7 +441,7 @@ final class JSONWriterJSONB
         if (ascii) {
             if (len <= STR_ASCII_FIX_LEN) {
                 bytes[this.off++] = (byte) (len + BC_STR_ASCII_FIX_MIN);
-            } else if (len >= INT32_BYTE_MIN && len <= INT32_BYTE_MAX) {
+            } else if (len <= INT32_BYTE_MAX) {
                 bytes[this.off++] = BC_STR_ASCII;
                 bytes[this.off++] = (byte) (BC_INT32_BYTE_ZERO + (len >> 8));
                 bytes[this.off++] = (byte) (len);
@@ -654,41 +647,6 @@ final class JSONWriterJSONB
         final int size = list.size();
         startArray(size);
 
-        if (STRING_VALUE != null && STRING_CODER != null) {
-            int mark = off;
-            final int LATIN = 0;
-            boolean latinAll = true;
-            for (int i = 0; i < size; i++) {
-                String str = list.get(i);
-                if (str == null) {
-                    writeNull();
-                }
-                int coder = STRING_CODER.applyAsInt(str);
-                if (coder != LATIN) {
-                    latinAll = false;
-                    off = mark;
-                    break;
-                }
-                int strlen = str.length();
-                if (strlen <= STR_ASCII_FIX_LEN) {
-                    bytes[off++] = (byte) (strlen + BC_STR_ASCII_FIX_MIN);
-                } else if (strlen >= INT32_BYTE_MIN && strlen <= INT32_BYTE_MAX) {
-                    bytes[off++] = BC_STR_ASCII;
-                    bytes[off++] = (byte) (BC_INT32_BYTE_ZERO + (strlen >> 8));
-                    bytes[off++] = (byte) (strlen);
-                } else {
-                    bytes[off++] = BC_STR_ASCII;
-                    writeInt32(strlen);
-                }
-                byte[] value = STRING_VALUE.apply(str);
-                System.arraycopy(value, 0, bytes, off, value.length);
-                off += strlen;
-            }
-            if (latinAll) {
-                return;
-            }
-        }
-
         for (int i = 0; i < size; i++) {
             String str = list.get(i);
             writeString(str);
@@ -700,38 +658,6 @@ final class JSONWriterJSONB
         if (str == null) {
             writeNull();
             return;
-        }
-
-        if (STRING_VALUE != null) {
-            int coder = STRING_CODER.applyAsInt(str);
-            byte[] value = STRING_VALUE.apply(str);
-
-            if (coder == 0) {
-                int off = this.off;
-                int strlen = value.length;
-                int minCapacity = value.length + off + 6;
-
-                if (minCapacity - bytes.length > 0) {
-                    ensureCapacity(minCapacity);
-                }
-
-                final byte[] bytes = this.bytes;
-                if (strlen <= STR_ASCII_FIX_LEN) {
-                    bytes[off++] = (byte) (strlen + BC_STR_ASCII_FIX_MIN);
-                } else if (strlen <= INT32_BYTE_MAX) {
-                    putStringSizeSmall(bytes, off, strlen);
-                    off += 3;
-                } else {
-                    off += putStringSizeLarge(bytes, off, strlen);
-                }
-                System.arraycopy(value, 0, bytes, off, value.length);
-                this.off = off + strlen;
-                return;
-            } else {
-                if (tryWriteStringUTF16(value)) {
-                    return;
-                }
-            }
         }
 
         writeString(
@@ -1198,7 +1124,7 @@ final class JSONWriterJSONB
             writeString(e.name());
         } else {
             int val = e.ordinal();
-            if (val >= BC_INT32_NUM_MIN && val <= BC_INT32_NUM_MAX) {
+            if (val <= BC_INT32_NUM_MAX) {
                 if (off == bytes.length) {
                     ensureCapacity(off + 1);
                 }
@@ -1370,47 +1296,6 @@ final class JSONWriterJSONB
     }
 
     @Override
-    public void writeLocalDate(LocalDate date) {
-        if (date == null) {
-            writeNull();
-            return;
-        }
-
-        int off = this.off;
-        ensureCapacity(off + 5);
-
-        final byte[] bytes = this.bytes;
-        bytes[off] = BC_LOCAL_DATE;
-        int year = date.getYear();
-        bytes[off + 1] = (byte) (year >>> 8);
-        bytes[off + 2] = (byte) year;
-        bytes[off + 3] = (byte) date.getMonthValue();
-        bytes[off + 4] = (byte) date.getDayOfMonth();
-        this.off = off + 5;
-    }
-
-    @Override
-    public void writeLocalTime(LocalTime time) {
-        if (time == null) {
-            writeNull();
-            return;
-        }
-
-        int off = this.off;
-        ensureCapacity(off + 4);
-
-        final byte[] bytes = this.bytes;
-        bytes[off] = BC_LOCAL_TIME;
-        bytes[off + 1] = (byte) time.getHour();
-        bytes[off + 2] = (byte) time.getMinute();
-        bytes[off + 3] = (byte) time.getSecond();
-        this.off = off + 4;
-
-        int nano = time.getNano();
-        writeInt32(nano);
-    }
-
-    @Override
     public void writeLocalDateTime(LocalDateTime dateTime) {
         if (dateTime == null) {
             writeNull();
@@ -1422,105 +1307,24 @@ final class JSONWriterJSONB
 
         final byte[] bytes = this.bytes;
         bytes[off] = BC_LOCAL_DATETIME;
-        int year = dateTime.getYear();
+        int year = dateTime.date.year;
         bytes[off + 1] = (byte) (year >>> 8);
         bytes[off + 2] = (byte) year;
-        bytes[off + 3] = (byte) dateTime.getMonthValue();
-        bytes[off + 4] = (byte) dateTime.getDayOfMonth();
-        bytes[off + 5] = (byte) dateTime.getHour();
-        bytes[off + 6] = (byte) dateTime.getMinute();
-        bytes[off + 7] = (byte) dateTime.getSecond();
+        bytes[off + 3] = (byte) dateTime.date.monthValue;
+        bytes[off + 4] = (byte) dateTime.date.dayOfMonth;
+        bytes[off + 5] = dateTime.time.hour;
+        bytes[off + 6] = dateTime.time.minute;
+        bytes[off + 7] = dateTime.time.second;
         this.off = off + 8;
 
-        int nano = dateTime.getNano();
+        int nano = dateTime.time.nano;
         writeInt32(nano);
     }
 
     @Override
-    public void writeZonedDateTime(ZonedDateTime dateTime) {
-        if (dateTime == null) {
-            writeNull();
-            return;
-        }
-
-        int off = this.off;
-        ensureCapacity(off + 8);
-
-        final byte[] bytes = this.bytes;
-        bytes[off] = BC_TIMESTAMP_WITH_TIMEZONE;
-        int year = dateTime.getYear();
-        bytes[off + 1] = (byte) (year >>> 8);
-        bytes[off + 2] = (byte) year;
-        bytes[off + 3] = (byte) dateTime.getMonthValue();
-        bytes[off + 4] = (byte) dateTime.getDayOfMonth();
-        bytes[off + 5] = (byte) dateTime.getHour();
-        bytes[off + 6] = (byte) dateTime.getMinute();
-        bytes[off + 7] = (byte) dateTime.getSecond();
-        this.off = off + 8;
-
-        int nano = dateTime.getNano();
-        writeInt32(nano);
-
-        ZoneId zoneId = dateTime.getZone();
-        String zoneIdStr = zoneId.getId();
-        switch (zoneIdStr) {
-            case SHANGHAI_ZONE_ID_NAME:
-                writeRaw(SHANGHAI_ZONE_ID_NAME_BYTES);
-                break;
-            default:
-                writeString(zoneIdStr);
-                break;
-        }
-    }
-
-    @Override
-    public void writeOffsetDateTime(OffsetDateTime dateTime) {
-        if (dateTime == null) {
-            writeNull();
-            return;
-        }
-
-        int off = this.off;
-        ensureCapacity(off + 8);
-
-        final byte[] bytes = this.bytes;
-        bytes[off] = BC_TIMESTAMP_WITH_TIMEZONE;
-        int year = dateTime.getYear();
-        bytes[off + 1] = (byte) (year >>> 8);
-        bytes[off + 2] = (byte) year;
-        bytes[off + 3] = (byte) dateTime.getMonthValue();
-        bytes[off + 4] = (byte) dateTime.getDayOfMonth();
-        bytes[off + 5] = (byte) dateTime.getHour();
-        bytes[off + 6] = (byte) dateTime.getMinute();
-        bytes[off + 7] = (byte) dateTime.getSecond();
-        this.off = off + 8;
-
-        int nano = dateTime.getNano();
-        writeInt32(nano);
-
-        ZoneId zoneId = dateTime.getOffset();
-        String zoneIdStr = zoneId.getId();
-        switch (zoneIdStr) {
-            case OFFSET_8_ZONE_ID_NAME:
-                writeRaw(OFFSET_8_ZONE_ID_NAME_BYTES);
-                break;
-            default:
-                writeString(zoneIdStr);
-                break;
-        }
-    }
-
-    @Override
-    public void writeInstant(Instant instant) {
-        if (instant == null) {
-            writeNull();
-            return;
-        }
-
+    public void writeInstant(long second, int nano) {
         ensureCapacity(off + 1);
         bytes[off++] = BC_TIMESTAMP;
-        long second = instant.getEpochSecond();
-        int nano = instant.getNano();
         writeInt64(second);
         writeInt32(nano);
     }
@@ -1616,8 +1420,7 @@ final class JSONWriterJSONB
             if (scale == 0) {
                 ensureCapacity(off + 1);
                 this.bytes[off++] = BC_DECIMAL_LONG;
-                long longValue = intCompact;
-                writeInt64(longValue);
+                writeInt64(intCompact);
                 return;
             }
 
